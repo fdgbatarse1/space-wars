@@ -33,8 +33,9 @@ function cloneShipModel(
   base: THREE.Group,
   options?: { recolor?: boolean; color?: THREE.Color | number },
 ): THREE.Group {
-  const group = base.clone(true);
-  group.traverse((child) => {
+  const wrapper = new THREE.Group();
+  const model = base.clone(true);
+  model.traverse((child) => {
     if (child instanceof THREE.Mesh) {
       child.castShadow = true;
       child.receiveShadow = false;
@@ -54,7 +55,9 @@ function cloneShipModel(
       }
     }
   });
-  return group;
+  model.rotateY(Math.PI);
+  wrapper.add(model);
+  return wrapper;
 }
 
 export async function createShip(): Promise<Ship> {
@@ -74,6 +77,7 @@ export async function createShip(): Promise<Ship> {
     mesh.receiveShadow = false;
     mesh.matrixAutoUpdate = false;
     group.add(mesh);
+    mesh.rotateY(Math.PI);
   }
 
   group.position.set(...CONFIG.ship.startPosition);
@@ -113,6 +117,7 @@ export async function createRemoteShip(playerId: string): Promise<Ship> {
     mesh.receiveShadow = false;
     mesh.matrixAutoUpdate = false;
     group.add(mesh);
+    mesh.rotateY(Math.PI);
   }
 
   const boundingBox = new THREE.Box3().setFromObject(group);
