@@ -43,6 +43,7 @@ let networkBullets: Map<string, Bullet> = new Map();
 let composer: EffectComposer;
 let chromaticEffect: ChromaticAberrationEffect;
 let hitEffectTimer = 0;
+let hud: HTMLDivElement | null = null;
 
 let lastTime = performance.now() / 1000;
 let accumulator = 0;
@@ -198,6 +199,7 @@ function setupNetworkHandlers(): void {
 
         hitEffectTimer = 0.3;
         chromaticEffect.offset.set(0.003, 0.003);
+        updateHUD();
       }
     } else {
       const remoteShip = remotePlayers.get(data.playerId);
@@ -296,6 +298,25 @@ function setupPostProcessing(): void {
   composer.addPass(effectPass);
 }
 
+function updateHUD(): void {
+  if (!hud) {
+    hud = document.createElement("div");
+    hud.style.position = "fixed";
+    hud.style.bottom = "12px";
+    hud.style.left = "12px";
+    hud.style.color = "#fff";
+    hud.style.fontFamily =
+      "system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
+    hud.style.fontSize = "18px";
+    hud.style.userSelect = "none";
+    hud.style.pointerEvents = "none";
+    hud.style.textShadow = "0 1px 2px rgba(0,0,0,0.6)";
+    document.body.appendChild(hud);
+  }
+  const current = ship?.health ?? 100;
+  hud.textContent = `❤ ${Math.max(0, Math.floor(current))}`;
+}
+
 function animate(): void {
   requestAnimationFrame(animate);
 
@@ -373,6 +394,7 @@ function update(deltaTime: number): void {
   });
 
   updateCamera();
+  updateHUD();
 }
 
 function updateCamera(): void {
