@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { gsap } from "gsap";
 import Stats from "stats.js";
 import { CONFIG } from "./config";
 import { createStarfield, updateStarfield } from "./starfield";
@@ -44,8 +45,9 @@ let networkBullets: Map<string, Bullet> = new Map();
 let loadingRemotePlayers: Set<string> = new Set();
 let composer: EffectComposer;
 let chromaticEffect: ChromaticAberrationEffect;
-let hitEffectTimer = 0;
 let hud: HTMLDivElement | null = null;
+
+const cameraKick = { amount: 0 };
 
 let lastTime = performance.now() / 1000;
 let accumulator = 0;
@@ -225,9 +227,14 @@ function setupNetworkHandlers(): void {
       if (ship) {
         ship.health = data.health;
         ship.maxHealth = data.maxHealth;
-
-        hitEffectTimer = 0.3;
-        chromaticEffect.offset.set(0.003, 0.003);
+        gsap.killTweensOf(chromaticEffect.offset);
+        chromaticEffect.offset.set(0.006, 0.006);
+        gsap.to(chromaticEffect.offset as unknown as object, {
+          x: 0,
+          y: 0,
+          duration: 0.35,
+          ease: "power2.out",
+        });
         updateHUD();
       }
     } else {
@@ -456,6 +463,13 @@ function update(deltaTime: number): void {
     if (bullet) {
       bullets.push(bullet);
 
+      gsap.killTweensOf(cameraKick);
+      gsap.fromTo(
+        cameraKick,
+        { amount: 1.1 },
+        { amount: 0, duration: 0.22, ease: "power3.out" },
+      );
+
       if (networkManager && networkManager.isConnected) {
         networkManager.fireBullet(
           bulletPos,
@@ -483,7 +497,8 @@ function update(deltaTime: number): void {
 }
 
 function updateCamera(): void {
-  const offset = new THREE.Vector3(0, 2.5, 8).applyQuaternion(
+  const offsetBaseZ = 8 + cameraKick.amount * 2.0;
+  const offset = new THREE.Vector3(0, 2.5, offsetBaseZ).applyQuaternion(
     ship.mesh.quaternion,
   );
   const targetPosition = ship.mesh.position.clone().add(offset);
@@ -492,12 +507,6 @@ function updateCamera(): void {
 }
 
 function render(): void {
-  if (hitEffectTimer > 0) {
-    hitEffectTimer -= CONFIG.fixedTimeStep;
-    const intensity = Math.max(0, hitEffectTimer / 0.3) * 0.003;
-    chromaticEffect.offset.set(intensity, intensity);
-  }
-
   composer.render();
 }
 
