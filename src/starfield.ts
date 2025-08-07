@@ -8,7 +8,7 @@ import {
 import { CONFIG } from "./config";
 
 const vertexShader = `
-  precision mediump float; // Add precision specifier for performance
+  precision mediump float;
   attribute float aSize;
   varying float vAlpha;
   
@@ -16,20 +16,19 @@ const vertexShader = `
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
     gl_Position = projectionMatrix * mvPosition;
     float depth = -mvPosition.z;
-    gl_PointSize = aSize * (300.0 / depth); // Reuse depth calculation
+    gl_PointSize = aSize * (300.0 / depth);
     vAlpha = 1.0 - smoothstep(200.0, 400.0, depth);
   }
 `;
 
 const fragmentShader = `
-  precision mediump float; // Add precision specifier for performance
+  precision mediump float;
   varying float vAlpha;
   
   void main() {
     vec2 center = vec2(0.5);
-    float dist = length(gl_PointCoord - center); // Use length instead of distance
+    float dist = length(gl_PointCoord - center);
     
-    // Use step for sharper cutoff (faster than smoothstep)
     if (dist > 0.5) {
       discard;
     }

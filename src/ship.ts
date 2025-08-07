@@ -6,6 +6,8 @@ export interface Ship {
   mesh: THREE.Group;
   velocity: THREE.Vector3;
   rotationVelocity: THREE.Vector3;
+  isRemote?: boolean;
+  playerId?: string;
 }
 
 export async function createShip(): Promise<Ship> {
@@ -44,6 +46,56 @@ export async function createShip(): Promise<Ship> {
     mesh: group,
     velocity: new THREE.Vector3(),
     rotationVelocity: new THREE.Vector3(),
+  };
+}
+
+export async function createRemoteShip(playerId: string): Promise<Ship> {
+  const group = new THREE.Group();
+
+  try {
+    const loader = new GLTFLoader();
+    const gltf = await loader.loadAsync("/assets/models/spaceship/Bob.gltf");
+    const model = gltf.scene;
+
+    model.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.castShadow = true;
+        child.receiveShadow = false;
+        child.matrixAutoUpdate = false;
+
+        if (child.material) {
+          const material = (
+            child.material as THREE.MeshStandardMaterial
+          ).clone();
+          material.color = new THREE.Color(0.8, 0.8, 1.0);
+          child.material = material;
+        }
+      }
+    });
+
+    group.add(model);
+  } catch (error) {
+    console.error(
+      "Could not load remote ship model, using fallback box",
+      error,
+    );
+    const geometry = new THREE.BoxGeometry(1, 0.5, 2);
+    const material = new THREE.MeshBasicMaterial({
+      color: 0x8844ff,
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.castShadow = true;
+    mesh.receiveShadow = false;
+    mesh.matrixAutoUpdate = false;
+    group.add(mesh);
+  }
+
+  return {
+    mesh: group,
+    velocity: new THREE.Vector3(),
+    rotationVelocity: new THREE.Vector3(),
+    isRemote: true,
+    playerId,
   };
 }
 

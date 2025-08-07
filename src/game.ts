@@ -4,6 +4,7 @@ import { CONFIG } from "./config";
 import { createStarfield, updateStarfield } from "./starfield";
 import {
   createShip,
+  createRemoteShip,
   updateShip,
   accelerateShip,
   decelerateShip,
@@ -20,6 +21,7 @@ import {
   disposeBulletSystem,
 } from "./bullets";
 import { setupInput, getInput } from "./input";
+import { createNetworkManager } from "./network";
 
 let scene: THREE.Scene;
 let camera: THREE.PerspectiveCamera;
@@ -29,6 +31,9 @@ let starfield: THREE.Points;
 let bullets: Bullet[] = [];
 let stats: Stats;
 let bulletSystem: ReturnType<typeof createBulletSystem>;
+let networkManager: ReturnType<typeof createNetworkManager>;
+let remotePlayers: Map<string, Ship> = new Map();
+let networkBullets: Map<string, Bullet> = new Map();
 
 let lastTime = performance.now() / 1000;
 let accumulator = 0;
@@ -54,9 +59,26 @@ export async function initGame(canvas: HTMLCanvasElement): Promise<void> {
 
   setupInput();
 
+  networkManager = createNetworkManager();
+  setupNetworkHandlers();
+
+  networkManager
+    .connect("https://space-wars-backend.onrender.com")
+    .then(() => {
+      console.log("Connected to multiplayer server");
+      networkManager.startSendingUpdates(ship);
+    })
+    .catch((error) => {
+      console.warn(
+        "Could not connect to multiplayer server, playing offline:",
+        error,
+      );
+    });
+
   window.addEventListener("resize", onWindowResize);
 
   window.addEventListener("beforeunload", () => {
+    networkManager.disconnect();
     disposeBulletSystem();
     renderer.dispose();
   });
@@ -64,6 +86,74 @@ export async function initGame(canvas: HTMLCanvasElement): Promise<void> {
   animate();
 
   console.log(renderer.info);
+}
+
+function setupNetworkHandlers(): void {
+  networkManager.onPlayerJoined = async (playerData) => {
+    const remoteShip = await createRemoteShip(playerData.id);
+    remoteShip.mesh.position.set(
+      playerData.position.x,
+      playerData.position.y,
+      playerData.position.z,
+    );
+    remoteShip.mesh.rotation.set(
+      playerData.rotation.x,
+      playerData.rotation.y,
+      playerData.rotation.z,
+    );
+    remotePlayers.set(playerData.id, remoteShip);
+    scene.add(remoteShip.mesh);
+  };
+
+  networkManager.onPlayerLeft = (playerId) => {
+    const remoteShip = remotePlayers.get(playerId);
+    if (remoteShip) {
+      scene.remove(remoteShip.mesh);
+      remotePlayers.delete(playerId);
+    }
+  };
+
+  networkManager.onPlayerMoved = (playerData) => {
+    const remoteShip = remotePlayers.get(playerData.id);
+    if (remoteShip) {
+      remoteShip.mesh.position.set(
+        playerData.position.x,
+        playerData.position.y,
+        playerData.position.z,
+      );
+      remoteShip.mesh.rotation.set(
+        playerData.rotation.x,
+        playerData.rotation.y,
+        playerData.rotation.z,
+      );
+      remoteShip.velocity.set(
+        playerData.velocity.x,
+        playerData.velocity.y,
+        playerData.velocity.z,
+      );
+    }
+  };
+
+  networkManager.onBulletFired = (bulletData) => {
+    if (bulletData.playerId === networkManager.playerId) return;
+
+    const bullet = createBullet(
+      new THREE.Vector3(
+        bulletData.position.x,
+        bulletData.position.y,
+        bulletData.position.z,
+      ),
+      new THREE.Vector3(
+        bulletData.velocity.x,
+        bulletData.velocity.y,
+        bulletData.velocity.z,
+      ),
+    );
+    if (bullet) {
+      networkBullets.set(bulletData.id, bullet);
+      bullets.push(bullet);
+    }
+  };
 }
 
 function setupScene(): void {
@@ -178,12 +268,28 @@ function update(deltaTime: number): void {
     const bullet = createBullet(bulletPos, forward);
     if (bullet) {
       bullets.push(bullet);
+
+      if (networkManager && networkManager.isConnected) {
+        networkManager.fireBullet(
+          bulletPos,
+          forward.multiplyScalar(CONFIG.bullet.speed),
+        );
+      }
     }
   }
 
   updateShip(ship, deltaTime);
   updateStarfield(starfield, deltaTime);
   bullets = updateBullets(bullets, deltaTime, scene);
+
+  remotePlayers.forEach((remoteShip) => {
+    if (remoteShip.velocity.length() > 0) {
+      remoteShip.mesh.position.addScaledVector(
+        remoteShip.velocity,
+        deltaTime * 0.5,
+      );
+    }
+  });
 
   updateCamera();
 }
