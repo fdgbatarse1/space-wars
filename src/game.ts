@@ -22,6 +22,12 @@ import {
 } from "./bullets";
 import { setupInput, getInput } from "./input";
 import { createNetworkManager } from "./network";
+import {
+  EffectComposer,
+  RenderPass,
+  ChromaticAberrationEffect,
+  EffectPass,
+} from "postprocessing";
 
 let scene: THREE.Scene;
 let camera: THREE.PerspectiveCamera;
@@ -34,6 +40,9 @@ let bulletSystem: ReturnType<typeof createBulletSystem>;
 let networkManager: ReturnType<typeof createNetworkManager>;
 let remotePlayers: Map<string, Ship> = new Map();
 let networkBullets: Map<string, Bullet> = new Map();
+let composer: EffectComposer;
+let chromaticEffect: ChromaticAberrationEffect;
+let hitEffectTimer = 0;
 
 let lastTime = performance.now() / 1000;
 let accumulator = 0;
@@ -43,6 +52,7 @@ export async function initGame(canvas: HTMLCanvasElement): Promise<void> {
   setupCamera();
   setupRenderer(canvas);
   setupLighting();
+  setupPostProcessing();
 
   stats = new Stats();
   stats.showPanel(0);
@@ -63,7 +73,7 @@ export async function initGame(canvas: HTMLCanvasElement): Promise<void> {
   setupNetworkHandlers();
 
   networkManager
-    .connect("https://space-wars-backend.onrender.com")
+    .connect()
     .then(() => {
       console.log("Connected to multiplayer server");
       networkManager.startSendingUpdates(ship);
@@ -114,7 +124,24 @@ function setupNetworkHandlers(): void {
   };
 
   networkManager.onPlayerMoved = (playerData) => {
-    const remoteShip = remotePlayers.get(playerData.id);
+    let remoteShip = remotePlayers.get(playerData.id);
+    if (!remoteShip) {
+      createRemoteShip(playerData.id).then((created) => {
+        created.mesh.position.set(
+          playerData.position.x,
+          playerData.position.y,
+          playerData.position.z,
+        );
+        created.mesh.rotation.set(
+          playerData.rotation.x,
+          playerData.rotation.y,
+          playerData.rotation.z,
+        );
+        remotePlayers.set(playerData.id, created);
+        scene.add(created.mesh);
+      });
+      return;
+    }
     if (remoteShip) {
       remoteShip.mesh.position.set(
         playerData.position.x,
@@ -137,21 +164,59 @@ function setupNetworkHandlers(): void {
   networkManager.onBulletFired = (bulletData) => {
     if (bulletData.playerId === networkManager.playerId) return;
 
-    const bullet = createBullet(
-      new THREE.Vector3(
-        bulletData.position.x,
-        bulletData.position.y,
-        bulletData.position.z,
-      ),
-      new THREE.Vector3(
-        bulletData.velocity.x,
-        bulletData.velocity.y,
-        bulletData.velocity.z,
-      ),
+    const start = new THREE.Vector3(
+      bulletData.position.x,
+      bulletData.position.y,
+      bulletData.position.z,
     );
+    const velocity = new THREE.Vector3(
+      bulletData.velocity.x,
+      bulletData.velocity.y,
+      bulletData.velocity.z,
+    );
+    const direction =
+      velocity.lengthSq() > 0
+        ? velocity.normalize()
+        : new THREE.Vector3(0, 0, -1);
+
+    const bullet = createBullet(start, direction);
     if (bullet) {
       networkBullets.set(bulletData.id, bullet);
       bullets.push(bullet);
+    }
+  };
+
+  networkManager.onPlayerHit = (data: {
+    playerId: string;
+    health: number;
+    maxHealth: number;
+  }) => {
+    if (data.playerId === networkManager.playerId) {
+      if (ship) {
+        ship.health = data.health;
+        ship.maxHealth = data.maxHealth;
+
+        hitEffectTimer = 0.3;
+        chromaticEffect.offset.set(0.003, 0.003);
+      }
+    } else {
+      const remoteShip = remotePlayers.get(data.playerId);
+      if (remoteShip) {
+        remoteShip.health = data.health;
+        remoteShip.maxHealth = data.maxHealth;
+      }
+    }
+  };
+
+  networkManager.onPlayerDied = (playerId: string) => {
+    if (playerId === networkManager.playerId) {
+      window.location.href = "https://www.google.com";
+    } else {
+      const remoteShip = remotePlayers.get(playerId);
+      if (remoteShip) {
+        scene.remove(remoteShip.mesh);
+        remotePlayers.delete(playerId);
+      }
     }
   };
 }
@@ -213,6 +278,22 @@ function setupLighting(): void {
   directionalLight.shadow.camera.top = 10;
   directionalLight.shadow.camera.bottom = -10;
   scene.add(directionalLight);
+}
+
+function setupPostProcessing(): void {
+  composer = new EffectComposer(renderer);
+
+  const renderPass = new RenderPass(scene, camera);
+  composer.addPass(renderPass);
+
+  chromaticEffect = new ChromaticAberrationEffect({
+    offset: new THREE.Vector2(0, 0),
+    radialModulation: false,
+    modulationOffset: 0,
+  });
+
+  const effectPass = new EffectPass(camera, chromaticEffect);
+  composer.addPass(effectPass);
 }
 
 function animate(): void {
@@ -304,7 +385,13 @@ function updateCamera(): void {
 }
 
 function render(): void {
-  renderer.render(scene, camera);
+  if (hitEffectTimer > 0) {
+    hitEffectTimer -= CONFIG.fixedTimeStep;
+    const intensity = Math.max(0, hitEffectTimer / 0.3) * 0.003;
+    chromaticEffect.offset.set(intensity, intensity);
+  }
+
+  composer.render();
 }
 
 function onWindowResize(): void {
@@ -313,4 +400,5 @@ function onWindowResize(): void {
   renderer.setSize(window.innerWidth, window.innerHeight);
   const dpr = Math.min(window.devicePixelRatio, 1.4);
   renderer.setPixelRatio(dpr);
+  composer.setSize(window.innerWidth, window.innerHeight);
 }

@@ -8,6 +8,8 @@ interface PlayerData {
   rotation: { x: number; y: number; z: number };
   velocity: { x: number; y: number; z: number };
   shipModel?: string;
+  health?: number;
+  maxHealth?: number;
 }
 
 interface BulletData {
@@ -27,6 +29,10 @@ interface NetworkState {
   onPlayerLeft: ((playerId: string) => void) | null;
   onPlayerMoved: ((data: PlayerData) => void) | null;
   onBulletFired: ((bullet: BulletData) => void) | null;
+  onPlayerHit:
+    | ((data: { playerId: string; health: number; maxHealth: number }) => void)
+    | null;
+  onPlayerDied: ((playerId: string) => void) | null;
 }
 
 const networkState: NetworkState = {
@@ -38,6 +44,8 @@ const networkState: NetworkState = {
   onPlayerLeft: null,
   onPlayerMoved: null,
   onBulletFired: null,
+  onPlayerHit: null,
+  onPlayerDied: null,
 };
 
 export function createNetworkManager() {
@@ -65,6 +73,20 @@ export function createNetworkManager() {
     },
     set onBulletFired(callback: ((bullet: BulletData) => void) | null) {
       networkState.onBulletFired = callback;
+    },
+    set onPlayerHit(
+      callback:
+        | ((data: {
+            playerId: string;
+            health: number;
+            maxHealth: number;
+          }) => void)
+        | null,
+    ) {
+      networkState.onPlayerHit = callback;
+    },
+    set onPlayerDied(callback: ((playerId: string) => void) | null) {
+      networkState.onPlayerDied = callback;
     },
   };
 }
@@ -132,6 +154,21 @@ function setupEventListeners(): void {
   networkState.socket.on("bullet_fired", (bullet: BulletData) => {
     if (networkState.onBulletFired) {
       networkState.onBulletFired(bullet);
+    }
+  });
+
+  networkState.socket.on(
+    "player_hit",
+    (data: { playerId: string; health: number; maxHealth: number }) => {
+      if (networkState.onPlayerHit) {
+        networkState.onPlayerHit(data);
+      }
+    },
+  );
+
+  networkState.socket.on("player_died", (playerId: string) => {
+    if (networkState.onPlayerDied) {
+      networkState.onPlayerDied(playerId);
     }
   });
 }

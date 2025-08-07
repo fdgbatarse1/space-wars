@@ -8,6 +8,9 @@ export interface Ship {
   rotationVelocity: THREE.Vector3;
   isRemote?: boolean;
   playerId?: string;
+  health?: number;
+  maxHealth?: number;
+  boundingBox?: THREE.Box3;
 }
 
 export async function createShip(): Promise<Ship> {
@@ -42,10 +45,15 @@ export async function createShip(): Promise<Ship> {
 
   group.position.set(...CONFIG.ship.startPosition);
 
+  const boundingBox = new THREE.Box3().setFromObject(group);
+
   return {
     mesh: group,
     velocity: new THREE.Vector3(),
     rotationVelocity: new THREE.Vector3(),
+    health: 100,
+    maxHealth: 100,
+    boundingBox,
   };
 }
 
@@ -90,12 +98,17 @@ export async function createRemoteShip(playerId: string): Promise<Ship> {
     group.add(mesh);
   }
 
+  const boundingBox = new THREE.Box3().setFromObject(group);
+
   return {
     mesh: group,
     velocity: new THREE.Vector3(),
     rotationVelocity: new THREE.Vector3(),
     isRemote: true,
     playerId,
+    health: 100,
+    maxHealth: 100,
+    boundingBox,
   };
 }
 
@@ -111,6 +124,10 @@ export function updateShip(ship: Ship, deltaTime: number): void {
   }
 
   ship.mesh.position.addScaledVector(ship.velocity, deltaTime);
+
+  if (ship.boundingBox) {
+    ship.boundingBox.setFromObject(ship.mesh);
+  }
 
   ship.mesh.updateMatrix();
   ship.mesh.traverse((child) => {

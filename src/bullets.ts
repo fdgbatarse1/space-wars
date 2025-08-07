@@ -8,6 +8,8 @@ export interface Bullet {
   lifetime: number;
   active: boolean;
   instanceId: number;
+  position?: THREE.Vector3;
+  boundingBox?: THREE.Box3;
 }
 
 export interface BulletSystem {
@@ -75,6 +77,14 @@ export function createBullet(
   bullet.active = true;
   bullet.velocity.copy(direction).multiplyScalar(CONFIG.bullet.speed);
   bullet.lifetime = 0;
+  bullet.position = position.clone();
+
+  const bulletSize = CONFIG.bullet.radius * 2;
+  bullet.boundingBox = new THREE.Box3(
+    new THREE.Vector3(-bulletSize, -bulletSize, -bulletSize),
+    new THREE.Vector3(bulletSize, bulletSize, bulletSize),
+  );
+  bullet.boundingBox.translate(position);
 
   tempMatrix.makeTranslation(position.x, position.y, position.z);
   bulletSystem.instancedMesh.setMatrixAt(bullet.instanceId, tempMatrix);
@@ -110,6 +120,24 @@ export function updateBullets(
     tempPosition.addScaledVector(bullet.velocity, deltaTime);
     tempMatrix.setPosition(tempPosition);
     bulletSystem!.instancedMesh.setMatrixAt(bullet.instanceId, tempMatrix);
+
+    if (bullet.position) {
+      bullet.position.copy(tempPosition);
+    }
+    if (bullet.boundingBox && bullet.position) {
+      const bulletSize = CONFIG.bullet.radius * 2;
+      bullet.boundingBox.min.set(
+        bullet.position.x - bulletSize,
+        bullet.position.y - bulletSize,
+        bullet.position.z - bulletSize,
+      );
+      bullet.boundingBox.max.set(
+        bullet.position.x + bulletSize,
+        bullet.position.y + bulletSize,
+        bullet.position.z + bulletSize,
+      );
+    }
+
     needsUpdate = true;
   });
 
