@@ -73,7 +73,7 @@ export async function initGame(canvas: HTMLCanvasElement): Promise<void> {
   setupNetworkHandlers();
 
   networkManager
-    .connect()
+    .connect(import.meta.env.VITE_SERVER_URL || "http://localhost:8080")
     .then(() => {
       console.log("Connected to multiplayer server");
       networkManager.startSendingUpdates(ship);
