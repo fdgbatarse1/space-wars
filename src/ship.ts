@@ -13,9 +13,7 @@ export async function createShip(): Promise<Ship> {
 
   try {
     const loader = new GLTFLoader();
-    const gltf = await loader.loadAsync(
-      "/public/assets/models/spaceship/Bob.gltf",
-    );
+    const gltf = await loader.loadAsync("/assets/models/spaceship/Bob.gltf");
     const model = gltf.scene;
 
     model.traverse((child) => {
