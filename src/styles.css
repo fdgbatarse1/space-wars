@@ -1,0 +1,17 @@
+* {
+  box-sizing: border-box;
+}
+
+img,
+picture,
+video,
+canvas,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+body {
+  width: 100vw;
+  height: 100vh;
+}
