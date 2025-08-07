@@ -3,6 +3,7 @@ import { gsap } from "gsap";
 import Stats from "stats.js";
 import { CONFIG } from "./config";
 import { createStarfield, updateStarfield } from "./starfield";
+import { RGBELoader } from "three/examples/jsm/loaders/RGBELoader.js";
 import {
   createShip,
   createRemoteShip,
@@ -49,6 +50,8 @@ let hud: HTMLDivElement | null = null;
 
 const cameraKick = { amount: 0 };
 
+let environmentTexture: THREE.Texture | null = null;
+
 let lastTime = performance.now() / 1000;
 let accumulator = 0;
 
@@ -56,6 +59,7 @@ export async function initGame(canvas: HTMLCanvasElement): Promise<void> {
   setupScene();
   setupCamera();
   setupRenderer(canvas);
+  await setupHDRI();
   setupLighting();
   setupPostProcessing();
 
@@ -95,6 +99,7 @@ export async function initGame(canvas: HTMLCanvasElement): Promise<void> {
   window.addEventListener("beforeunload", () => {
     networkManager.disconnect();
     disposeBulletSystem();
+    if (environmentTexture) environmentTexture.dispose();
     renderer.dispose();
   });
 
@@ -351,13 +356,32 @@ function setupRenderer(canvas: HTMLCanvasElement): void {
   renderer.shadowMap.needsUpdate = true;
 }
 
-function setupLighting(): void {
-  const ambientLight = new THREE.AmbientLight(
-    CONFIG.lighting.ambient.color,
-    CONFIG.lighting.ambient.intensity,
-  );
-  scene.add(ambientLight);
+async function setupHDRI(): Promise<void> {
+  const rgbeLoader = new RGBELoader();
+  const pmremGenerator = new THREE.PMREMGenerator(renderer);
+  pmremGenerator.compileEquirectangularShader();
 
+  try {
+    const hdrTex = await rgbeLoader.loadAsync(
+      "/assets/textures/studio_small_08_1k.hdr",
+    );
+    hdrTex.mapping = THREE.EquirectangularReflectionMapping;
+
+    const envMap = pmremGenerator.fromEquirectangular(hdrTex).texture;
+    environmentTexture = envMap;
+
+    scene.environment = envMap;
+    scene.background = null;
+
+    hdrTex.dispose();
+  } catch (e) {
+    console.warn("HDRI environment failed to load. Continuing without it.", e);
+  } finally {
+    pmremGenerator.dispose();
+  }
+}
+
+function setupLighting(): void {
   const directionalLight = new THREE.DirectionalLight(
     CONFIG.lighting.directional.color,
     CONFIG.lighting.directional.intensity,
