@@ -6,6 +6,7 @@ import {
   createShip,
   createRemoteShip,
   updateShip,
+  disposeShip,
   accelerateShip,
   decelerateShip,
   pitchShip,
@@ -40,6 +41,7 @@ let bulletSystem: ReturnType<typeof createBulletSystem>;
 let networkManager: ReturnType<typeof createNetworkManager>;
 let remotePlayers: Map<string, Ship> = new Map();
 let networkBullets: Map<string, Bullet> = new Map();
+let loadingRemotePlayers: Set<string> = new Set();
 let composer: EffectComposer;
 let chromaticEffect: ChromaticAberrationEffect;
 let hitEffectTimer = 0;
@@ -101,7 +103,21 @@ export async function initGame(canvas: HTMLCanvasElement): Promise<void> {
 
 function setupNetworkHandlers(): void {
   networkManager.onPlayerJoined = async (playerData) => {
+    if (
+      remotePlayers.has(playerData.id) ||
+      loadingRemotePlayers.has(playerData.id)
+    ) {
+      return;
+    }
+    loadingRemotePlayers.add(playerData.id);
     const remoteShip = await createRemoteShip(playerData.id);
+    if (
+      !loadingRemotePlayers.has(playerData.id) ||
+      remotePlayers.has(playerData.id)
+    ) {
+      loadingRemotePlayers.delete(playerData.id);
+      return;
+    }
     remoteShip.mesh.position.set(
       playerData.position.x,
       playerData.position.y,
@@ -114,20 +130,32 @@ function setupNetworkHandlers(): void {
     );
     remotePlayers.set(playerData.id, remoteShip);
     scene.add(remoteShip.mesh);
+    loadingRemotePlayers.delete(playerData.id);
   };
 
   networkManager.onPlayerLeft = (playerId) => {
     const remoteShip = remotePlayers.get(playerId);
     if (remoteShip) {
+      disposeShip(remoteShip);
       scene.remove(remoteShip.mesh);
       remotePlayers.delete(playerId);
     }
+    loadingRemotePlayers.delete(playerId);
   };
 
   networkManager.onPlayerMoved = (playerData) => {
     let remoteShip = remotePlayers.get(playerData.id);
     if (!remoteShip) {
+      if (loadingRemotePlayers.has(playerData.id)) return;
+      loadingRemotePlayers.add(playerData.id);
       createRemoteShip(playerData.id).then((created) => {
+        if (
+          !loadingRemotePlayers.has(playerData.id) ||
+          remotePlayers.has(playerData.id)
+        ) {
+          loadingRemotePlayers.delete(playerData.id);
+          return;
+        }
         created.mesh.position.set(
           playerData.position.x,
           playerData.position.y,
@@ -140,6 +168,7 @@ function setupNetworkHandlers(): void {
         );
         remotePlayers.set(playerData.id, created);
         scene.add(created.mesh);
+        loadingRemotePlayers.delete(playerData.id);
       });
       return;
     }
@@ -212,13 +241,69 @@ function setupNetworkHandlers(): void {
 
   networkManager.onPlayerDied = (playerId: string) => {
     if (playerId === networkManager.playerId) {
-      window.location.href = "https://www.google.com";
+      ship.velocity.set(0, 0, 0);
+      ship.rotationVelocity.set(0, 0, 0);
     } else {
       const remoteShip = remotePlayers.get(playerId);
       if (remoteShip) {
+        disposeShip(remoteShip);
         scene.remove(remoteShip.mesh);
         remotePlayers.delete(playerId);
       }
+    }
+    loadingRemotePlayers.delete(playerId);
+  };
+
+  networkManager.onPlayerRespawned = async (playerData) => {
+    if (playerData.id === networkManager.playerId) {
+      ship.mesh.position.set(
+        playerData.position.x,
+        playerData.position.y,
+        playerData.position.z,
+      );
+      ship.mesh.rotation.set(
+        playerData.rotation.x,
+        playerData.rotation.y,
+        playerData.rotation.z,
+      );
+      ship.velocity.set(0, 0, 0);
+      ship.rotationVelocity.set(0, 0, 0);
+      ship.health = playerData.maxHealth ?? 100;
+      ship.maxHealth = playerData.maxHealth ?? 100;
+      updateHUD();
+    } else {
+      let remoteShip = remotePlayers.get(playerData.id);
+      if (!remoteShip) {
+        if (!loadingRemotePlayers.has(playerData.id)) {
+          loadingRemotePlayers.add(playerData.id);
+          const created = await createRemoteShip(playerData.id);
+          if (
+            loadingRemotePlayers.has(playerData.id) &&
+            !remotePlayers.has(playerData.id)
+          ) {
+            remotePlayers.set(playerData.id, created);
+            scene.add(created.mesh);
+          }
+          loadingRemotePlayers.delete(playerData.id);
+          remoteShip = remotePlayers.get(playerData.id) ?? created;
+        }
+      }
+      if (!remoteShip) {
+        return;
+      }
+      remoteShip.mesh.position.set(
+        playerData.position.x,
+        playerData.position.y,
+        playerData.position.z,
+      );
+      remoteShip.mesh.rotation.set(
+        playerData.rotation.x,
+        playerData.rotation.y,
+        playerData.rotation.z,
+      );
+      remoteShip.velocity.set(0, 0, 0);
+      remoteShip.health = playerData.maxHealth ?? 100;
+      remoteShip.maxHealth = playerData.maxHealth ?? 100;
     }
   };
 }

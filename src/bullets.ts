@@ -102,6 +102,7 @@ export function updateBullets(
 
   let needsUpdate = false;
 
+  const bs = bulletSystem;
   bulletSystem.bullets.forEach((bullet) => {
     if (!bullet.active) return;
 
@@ -109,17 +110,17 @@ export function updateBullets(
 
     if (bullet.lifetime > CONFIG.bullet.lifetime) {
       tempMatrix.makeScale(0, 0, 0);
-      bulletSystem!.instancedMesh.setMatrixAt(bullet.instanceId, tempMatrix);
+      bs.instancedMesh.setMatrixAt(bullet.instanceId, tempMatrix);
       bullet.active = false;
       needsUpdate = true;
       return;
     }
 
-    bulletSystem!.instancedMesh.getMatrixAt(bullet.instanceId, tempMatrix);
+    bs.instancedMesh.getMatrixAt(bullet.instanceId, tempMatrix);
     tempPosition.setFromMatrixPosition(tempMatrix);
     tempPosition.addScaledVector(bullet.velocity, deltaTime);
     tempMatrix.setPosition(tempPosition);
-    bulletSystem!.instancedMesh.setMatrixAt(bullet.instanceId, tempMatrix);
+    bs.instancedMesh.setMatrixAt(bullet.instanceId, tempMatrix);
 
     if (bullet.position) {
       bullet.position.copy(tempPosition);
@@ -142,7 +143,7 @@ export function updateBullets(
   });
 
   if (needsUpdate) {
-    bulletSystem.instancedMesh.instanceMatrix.needsUpdate = true;
+    bs.instancedMesh.instanceMatrix.needsUpdate = true;
   }
 
   return bulletSystem.bullets.filter((b) => b.active);

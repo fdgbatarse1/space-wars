@@ -33,6 +33,7 @@ interface NetworkState {
     | ((data: { playerId: string; health: number; maxHealth: number }) => void)
     | null;
   onPlayerDied: ((playerId: string) => void) | null;
+  onPlayerRespawned: ((player: PlayerData) => void) | null;
 }
 
 const networkState: NetworkState = {
@@ -46,6 +47,7 @@ const networkState: NetworkState = {
   onBulletFired: null,
   onPlayerHit: null,
   onPlayerDied: null,
+  onPlayerRespawned: null,
 };
 
 export function createNetworkManager() {
@@ -87,6 +89,9 @@ export function createNetworkManager() {
     },
     set onPlayerDied(callback: ((playerId: string) => void) | null) {
       networkState.onPlayerDied = callback;
+    },
+    set onPlayerRespawned(callback: ((player: PlayerData) => void) | null) {
+      networkState.onPlayerRespawned = callback;
     },
   };
 }
@@ -169,6 +174,12 @@ function setupEventListeners(): void {
   networkState.socket.on("player_died", (playerId: string) => {
     if (networkState.onPlayerDied) {
       networkState.onPlayerDied(playerId);
+    }
+  });
+
+  networkState.socket.on("player_respawned", (player: PlayerData) => {
+    if (networkState.onPlayerRespawned) {
+      networkState.onPlayerRespawned(player);
     }
   });
 }

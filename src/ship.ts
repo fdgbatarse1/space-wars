@@ -13,29 +13,62 @@ export interface Ship {
   boundingBox?: THREE.Box3;
 }
 
-export async function createShip(): Promise<Ship> {
-  const group = new THREE.Group();
+const modelCache: Map<string, THREE.Group> = new Map();
+const ownedMaterials = new WeakSet<THREE.Material>();
+const ownedGeometries = new WeakSet<THREE.BufferGeometry>();
 
-  try {
-    const loader = new GLTFLoader();
-    const gltf = await loader.loadAsync("/assets/models/spaceship/Bob.gltf");
-    const model = gltf.scene;
+async function loadModelOnce(modelPath: string): Promise<THREE.Group> {
+  const cached = modelCache.get(modelPath);
+  if (cached) {
+    return cached;
+  }
+  const loader = new GLTFLoader();
+  const gltf = await loader.loadAsync(modelPath);
+  const sceneGroup = gltf.scene as THREE.Group;
+  modelCache.set(modelPath, sceneGroup);
+  return sceneGroup;
+}
 
-    model.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        child.castShadow = true;
-        child.receiveShadow = false;
-        child.matrixAutoUpdate = false;
+function cloneShipModel(
+  base: THREE.Group,
+  options?: { recolor?: boolean; color?: THREE.Color | number },
+): THREE.Group {
+  const group = base.clone(true);
+  group.traverse((child) => {
+    if (child instanceof THREE.Mesh) {
+      child.castShadow = true;
+      child.receiveShadow = false;
+      child.matrixAutoUpdate = false;
+
+      if (options?.recolor && child.material) {
+        const material = (child.material as THREE.MeshStandardMaterial).clone();
+        if (options.color) {
+          const color =
+            options.color instanceof THREE.Color
+              ? options.color
+              : new THREE.Color(options.color);
+          material.color = color;
+        }
+        ownedMaterials.add(material);
+        child.material = material;
       }
-    });
+    }
+  });
+  return group;
+}
 
-    group.add(model);
+export async function createShip(): Promise<Ship> {
+  let group: THREE.Group;
+  try {
+    const base = await loadModelOnce("/assets/models/spaceship/Bob.gltf");
+    group = cloneShipModel(base);
   } catch (error) {
     console.error("Could not load ship model, using fallback box", error);
+    group = new THREE.Group();
     const geometry = new THREE.BoxGeometry(1, 0.5, 2);
-    const material = new THREE.MeshBasicMaterial({
-      color: 0x4488ff,
-    });
+    const material = new THREE.MeshBasicMaterial({ color: 0x4488ff });
+    ownedGeometries.add(geometry);
+    ownedMaterials.add(material);
     const mesh = new THREE.Mesh(geometry, material);
     mesh.castShadow = true;
     mesh.receiveShadow = false;
@@ -58,39 +91,23 @@ export async function createShip(): Promise<Ship> {
 }
 
 export async function createRemoteShip(playerId: string): Promise<Ship> {
-  const group = new THREE.Group();
-
+  let group: THREE.Group;
   try {
-    const loader = new GLTFLoader();
-    const gltf = await loader.loadAsync("/assets/models/spaceship/Bob.gltf");
-    const model = gltf.scene;
-
-    model.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        child.castShadow = true;
-        child.receiveShadow = false;
-        child.matrixAutoUpdate = false;
-
-        if (child.material) {
-          const material = (
-            child.material as THREE.MeshStandardMaterial
-          ).clone();
-          material.color = new THREE.Color(0.8, 0.8, 1.0);
-          child.material = material;
-        }
-      }
+    const base = await loadModelOnce("/assets/models/spaceship/Bob.gltf");
+    group = cloneShipModel(base, {
+      recolor: true,
+      color: new THREE.Color(0.8, 0.8, 1.0),
     });
-
-    group.add(model);
   } catch (error) {
     console.error(
       "Could not load remote ship model, using fallback box",
       error,
     );
+    group = new THREE.Group();
     const geometry = new THREE.BoxGeometry(1, 0.5, 2);
-    const material = new THREE.MeshBasicMaterial({
-      color: 0x8844ff,
-    });
+    const material = new THREE.MeshBasicMaterial({ color: 0x8844ff });
+    ownedGeometries.add(geometry);
+    ownedMaterials.add(material);
     const mesh = new THREE.Mesh(geometry, material);
     mesh.castShadow = true;
     mesh.receiveShadow = false;
@@ -163,4 +180,30 @@ export function yawShip(
   deltaTime: number,
 ): void {
   ship.rotationVelocity.y += direction * CONFIG.ship.turnSpeed * deltaTime;
+}
+
+export function disposeShip(ship: Ship): void {
+  ship.mesh.traverse((obj) => {
+    if (!(obj instanceof THREE.Mesh)) return;
+    const mesh = obj as THREE.Mesh;
+
+    const material = mesh.material as THREE.Material | THREE.Material[] | null;
+    if (material) {
+      const materialsArray = Array.isArray(material) ? material : [material];
+      materialsArray.forEach((mat) => {
+        if (ownedMaterials.has(mat) && typeof mat.dispose === "function") {
+          mat.dispose();
+        }
+      });
+    }
+
+    const geometry = mesh.geometry as THREE.BufferGeometry | undefined;
+    if (
+      geometry &&
+      ownedGeometries.has(geometry) &&
+      typeof geometry.dispose === "function"
+    ) {
+      geometry.dispose();
+    }
+  });
 }
