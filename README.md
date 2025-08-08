@@ -27,7 +27,7 @@ cleaner look, fewer moving parts, and more headroom for multiplayer.
 
 ## 🪐 The Basics I Got Right
 
-Correct handling of colorspace, tone mapping, dpr, antialiasing, resize, side of the material, shadows, minimal ui, debugging tools etc.
+Correct handling of colorspace, tone mapping, dpr, antialiasing, resize, side of the material, minimal ui, debugging tools etc.
 
 ## 🧠 And A Little More Complex Stuff
 
