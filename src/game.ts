@@ -54,6 +54,9 @@ const cameraKick = { amount: 0 };
 
 let environmentTexture: THREE.Texture | null = null;
 
+let isCoarsePointer: boolean =
+  window.matchMedia?.("(pointer: coarse)").matches ?? false;
+
 let lastTime = performance.now() / 1000;
 let accumulator = 0;
 
@@ -342,8 +345,8 @@ function setupCamera(): void {
 
 // configures the webgl renderer (dpr, size, tone mapping) for performance
 function setupRenderer(canvas: HTMLCanvasElement): void {
-  const isCoarse = window.matchMedia?.("(pointer: coarse)").matches ?? false;
-  const dprTarget = isCoarse ? 1.0 : 1.4;
+  isCoarsePointer = window.matchMedia?.("(pointer: coarse)").matches ?? false;
+  const dprTarget = isCoarsePointer ? 1.0 : 1.4;
   const dpr = Math.min(window.devicePixelRatio, dprTarget);
 
   renderer = new THREE.WebGLRenderer({
@@ -513,7 +516,8 @@ function update(deltaTime: number): void {
 
 // uses a smooth third-person follow camera with brief kickback when firing
 function updateCamera(): void {
-  const offsetBaseZ = 8 + cameraKick.amount * 2.0;
+  const mobileExtraBack = isCoarsePointer ? 2.0 : 0.0;
+  const offsetBaseZ = 8 + mobileExtraBack + cameraKick.amount * 2.0;
   const offset = new THREE.Vector3(0, 2.5, offsetBaseZ).applyQuaternion(
     ship.mesh.quaternion,
   );
@@ -532,8 +536,8 @@ function onWindowResize(): void {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
-  const isCoarse = window.matchMedia?.("(pointer: coarse)").matches ?? false;
-  const dprTarget = isCoarse ? 1.0 : 1.4;
+  isCoarsePointer = window.matchMedia?.("(pointer: coarse)").matches ?? false;
+  const dprTarget = isCoarsePointer ? 1.0 : 1.4;
   const dpr = Math.min(window.devicePixelRatio, dprTarget);
   renderer.setPixelRatio(dpr);
   composer.setSize(window.innerWidth, window.innerHeight);

@@ -4,9 +4,9 @@ export const CONFIG = {
   ship: {
     forwardSpeed: 15,
     backwardSpeed: 8,
-    turnSpeed: 2.2,
+    turnSpeed: 2.8,
     velocityDamping: 0.98,
-    rotationDamping: 0.94,
+    rotationDamping: 0.97,
     maxVelocity: 20,
     startPosition: [0, 0.5, 0] as [number, number, number],
   },
