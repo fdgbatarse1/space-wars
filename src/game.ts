@@ -57,6 +57,10 @@ const cameraKick = { amount: 0 };
 
 let environmentTexture: THREE.Texture | null = null;
 
+const isDebug = import.meta.env.VITE_IS_DEBUG === "true";
+let shipBoxHelper: THREE.BoxHelper | null = null;
+let remoteBoxHelpers: Map<string, THREE.BoxHelper> = new Map();
+
 let isCoarsePointer: boolean =
   window.matchMedia?.("(pointer: coarse)").matches ?? false;
 
@@ -71,7 +75,6 @@ export async function initGame(canvas: HTMLCanvasElement): Promise<void> {
   await setupHDRI();
   setupPostProcessing();
 
-  const isDebug = import.meta.env.VITE_IS_DEBUG === "true";
   if (isDebug) {
     stats = new Stats();
     stats.showPanel(0);
@@ -86,6 +89,11 @@ export async function initGame(canvas: HTMLCanvasElement): Promise<void> {
 
   ship = await createShip();
   scene.add(ship.mesh);
+
+  if (isDebug) {
+    shipBoxHelper = new THREE.BoxHelper(ship.mesh, 0x00ff00);
+    scene.add(shipBoxHelper);
+  }
 
   bulletSystem = createBulletSystem();
   scene.add(bulletSystem.instancedMesh);
@@ -115,6 +123,18 @@ export async function initGame(canvas: HTMLCanvasElement): Promise<void> {
     disposeBulletSystem();
     if (environmentTexture) environmentTexture.dispose();
     disposeShipAssets();
+    if (shipBoxHelper) {
+      scene.remove(shipBoxHelper);
+      shipBoxHelper.geometry.dispose();
+      (shipBoxHelper.material as unknown as THREE.Material)?.dispose?.();
+      shipBoxHelper = null;
+    }
+    remoteBoxHelpers.forEach((helper) => {
+      scene.remove(helper);
+      helper.geometry.dispose();
+      (helper.material as unknown as THREE.Material)?.dispose?.();
+    });
+    remoteBoxHelpers.clear();
     renderer.dispose();
   });
 
@@ -153,6 +173,11 @@ function setupNetworkHandlers(): void {
     );
     remotePlayers.set(playerData.id, remoteShip);
     scene.add(remoteShip.mesh);
+    if (isDebug) {
+      const helper = new THREE.BoxHelper(remoteShip.mesh, 0xff8800);
+      remoteBoxHelpers.set(playerData.id, helper);
+      scene.add(helper);
+    }
     loadingRemotePlayers.delete(playerData.id);
   };
 
@@ -162,6 +187,13 @@ function setupNetworkHandlers(): void {
       disposeShip(remoteShip);
       scene.remove(remoteShip.mesh);
       remotePlayers.delete(playerId);
+    }
+    const helper = remoteBoxHelpers.get(playerId);
+    if (helper) {
+      scene.remove(helper);
+      helper.geometry.dispose();
+      (helper.material as unknown as THREE.Material)?.dispose?.();
+      remoteBoxHelpers.delete(playerId);
     }
     loadingRemotePlayers.delete(playerId);
   };
@@ -191,6 +223,11 @@ function setupNetworkHandlers(): void {
         );
         remotePlayers.set(playerData.id, created);
         scene.add(created.mesh);
+        if (isDebug) {
+          const helper = new THREE.BoxHelper(created.mesh, 0xff8800);
+          remoteBoxHelpers.set(playerData.id, helper);
+          scene.add(helper);
+        }
         loadingRemotePlayers.delete(playerData.id);
       });
       return;
@@ -271,12 +308,25 @@ function setupNetworkHandlers(): void {
     if (playerId === networkManager.playerId) {
       ship.velocity.set(0, 0, 0);
       ship.rotationVelocity.set(0, 0, 0);
+      if (shipBoxHelper) {
+        scene.remove(shipBoxHelper);
+        shipBoxHelper.geometry.dispose();
+        (shipBoxHelper.material as unknown as THREE.Material)?.dispose?.();
+        shipBoxHelper = null;
+      }
     } else {
       const remoteShip = remotePlayers.get(playerId);
       if (remoteShip) {
         disposeShip(remoteShip);
         scene.remove(remoteShip.mesh);
         remotePlayers.delete(playerId);
+      }
+      const helper = remoteBoxHelpers.get(playerId);
+      if (helper) {
+        scene.remove(helper);
+        helper.geometry.dispose();
+        (helper.material as unknown as THREE.Material)?.dispose?.();
+        remoteBoxHelpers.delete(playerId);
       }
     }
     loadingRemotePlayers.delete(playerId);
@@ -298,6 +348,15 @@ function setupNetworkHandlers(): void {
       ship.rotationVelocity.set(0, 0, 0);
       ship.health = playerData.maxHealth ?? 100;
       ship.maxHealth = playerData.maxHealth ?? 100;
+      if (isDebug) {
+        if (shipBoxHelper) {
+          shipBoxHelper.visible = true;
+          shipBoxHelper.update();
+        } else {
+          shipBoxHelper = new THREE.BoxHelper(ship.mesh, 0x00ff00);
+          scene.add(shipBoxHelper);
+        }
+      }
       updateHUD();
     } else {
       let remoteShip = remotePlayers.get(playerData.id);
@@ -311,6 +370,11 @@ function setupNetworkHandlers(): void {
           ) {
             remotePlayers.set(playerData.id, created);
             scene.add(created.mesh);
+            if (isDebug) {
+              const helper = new THREE.BoxHelper(created.mesh, 0xff8800);
+              remoteBoxHelpers.set(playerData.id, helper);
+              scene.add(helper);
+            }
           }
           loadingRemotePlayers.delete(playerData.id);
           remoteShip = remotePlayers.get(playerData.id) ?? created;
@@ -522,6 +586,9 @@ function update(deltaTime: number): void {
 
   updateCamera();
   updateHUD();
+
+  if (shipBoxHelper) shipBoxHelper.update();
+  remoteBoxHelpers.forEach((helper) => helper.update());
 }
 
 // uses a smooth third-person follow camera with brief kickback when firing
