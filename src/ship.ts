@@ -3,6 +3,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
+import * as BufferGeometryUtils from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { CONFIG } from "./config";
 
 export interface Ship {
@@ -84,8 +85,10 @@ async function loadModelOnce(modelPath: string): Promise<THREE.Group> {
       });
     }
   });
-  modelCache.set(modelPath, sceneGroup);
-  return sceneGroup;
+
+  const optimized = optimizeModel(sceneGroup);
+  modelCache.set(modelPath, optimized);
+  return optimized;
 }
 
 // deep-clones the model optionally recolors materials freezes matrices rotates y and wraps in a parent group
@@ -118,6 +121,67 @@ function cloneShipModel(
   model.rotateY(Math.PI);
   wrapper.add(model);
   return wrapper;
+}
+
+// merges geometries by material (one mesh per material)
+function optimizeModel(source: THREE.Group): THREE.Group {
+  const optimized = new THREE.Group();
+  source.updateMatrixWorld(true);
+
+  const materialToGeometries = new Map<
+    THREE.Material,
+    THREE.BufferGeometry[]
+  >();
+  const passthroughMeshes: THREE.Mesh[] = [];
+
+  source.traverse((obj) => {
+    if (!(obj instanceof THREE.Mesh)) return;
+    const mesh = obj as THREE.Mesh;
+    const material = mesh.material as THREE.Material | THREE.Material[] | null;
+    const geometry = mesh.geometry as THREE.BufferGeometry | undefined;
+    if (!geometry || !material) return;
+
+    if (Array.isArray(material)) {
+      const clone = new THREE.Mesh(geometry.clone(), material);
+      clone.applyMatrix4(mesh.matrixWorld);
+      clone.castShadow = false;
+      clone.receiveShadow = false;
+      clone.matrixAutoUpdate = false;
+      passthroughMeshes.push(clone);
+      return;
+    }
+
+    const geom = geometry.clone();
+    geom.applyMatrix4(mesh.matrixWorld);
+    const list = materialToGeometries.get(material) ?? [];
+    list.push(geom);
+    materialToGeometries.set(material, list);
+  });
+
+  materialToGeometries.forEach((geos, material) => {
+    try {
+      const merged = BufferGeometryUtils.mergeGeometries(geos, false);
+      if (merged) {
+        const mergedMesh = new THREE.Mesh(merged, material);
+        mergedMesh.castShadow = false;
+        mergedMesh.receiveShadow = false;
+        mergedMesh.matrixAutoUpdate = false;
+        optimized.add(mergedMesh);
+      }
+    } catch {
+      geos.forEach((g) => {
+        const m = new THREE.Mesh(g, material);
+        m.castShadow = false;
+        m.receiveShadow = false;
+        m.matrixAutoUpdate = false;
+        optimized.add(m);
+      });
+    }
+  });
+
+  passthroughMeshes.forEach((m) => optimized.add(m));
+
+  return optimized;
 }
 
 // builds the local player ship from the cached model or box fallback sets start pose and computes a bounding box
@@ -284,4 +348,26 @@ export function disposeShip(ship: Ship): void {
 // optionally disposes the draco decoder workers when no further draco content will be loaded
 export function disposeDracoLoader(): void {
   dracoLoader.dispose();
+}
+
+// disposes cached model assets and textures
+export function disposeShipAssets(): void {
+  modelCache.forEach((group) => {
+    group.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) {
+        const mat = obj.material as THREE.Material | THREE.Material[] | null;
+        if (mat) {
+          if (Array.isArray(mat)) mat.forEach((m) => m.dispose?.());
+          else mat.dispose?.();
+        }
+        const geo = obj.geometry as THREE.BufferGeometry | undefined;
+        geo?.dispose?.();
+      }
+    });
+  });
+  modelCache.clear();
+  if (blueTexture) {
+    blueTexture.dispose();
+    blueTexture = null;
+  }
 }

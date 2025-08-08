@@ -12,6 +12,7 @@ import {
   createRemoteShip,
   updateShip,
   disposeShip,
+  disposeShipAssets,
   accelerateShip,
   decelerateShip,
   pitchShip,
@@ -113,6 +114,7 @@ export async function initGame(canvas: HTMLCanvasElement): Promise<void> {
     networkManager.disconnect();
     disposeBulletSystem();
     if (environmentTexture) environmentTexture.dispose();
+    disposeShipAssets();
     renderer.dispose();
   });
 
