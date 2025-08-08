@@ -24,6 +24,7 @@
   "dependencies": {
     "@types/stats.js": "^0.17.4",
     "gsap": "^3.13.0",
+    "lil-gui": "^0.19.2",
     "postprocessing": "^6.37.7",
     "socket.io-client": "^4.8.1",
     "stats.js": "^0.17.0",

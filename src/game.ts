@@ -3,6 +3,7 @@
 import * as THREE from "three";
 import { gsap } from "gsap";
 import Stats from "stats.js";
+import GUI from "lil-gui";
 import { CONFIG } from "./config";
 import { createStarfield, updateStarfield } from "./starfield";
 import { RGBELoader } from "three/examples/jsm/loaders/RGBELoader.js";
@@ -40,7 +41,8 @@ let renderer: THREE.WebGLRenderer;
 let ship: Ship;
 let starfield: THREE.Points;
 let bullets: Bullet[] = [];
-let stats: Stats;
+let stats: Stats | null = null;
+let gui: GUI | null = null;
 let bulletSystem: ReturnType<typeof createBulletSystem>;
 let networkManager: ReturnType<typeof createNetworkManager>;
 let remotePlayers: Map<string, Ship> = new Map();
@@ -68,9 +70,15 @@ export async function initGame(canvas: HTMLCanvasElement): Promise<void> {
   await setupHDRI();
   setupPostProcessing();
 
-  stats = new Stats();
-  stats.showPanel(0);
-  document.body.appendChild(stats.dom);
+  const isDebug = import.meta.env.VITE_IS_DEBUG === "true";
+  if (isDebug) {
+    stats = new Stats();
+    stats.showPanel(0);
+    document.body.appendChild(stats.dom);
+
+    gui = new GUI({ title: "Config" });
+    buildConfigGUI(gui);
+  }
 
   starfield = createStarfield();
   scene.add(starfield);
@@ -429,7 +437,7 @@ function updateHUD(): void {
 function animate(): void {
   requestAnimationFrame(animate);
 
-  stats.begin();
+  if (stats) stats.begin();
 
   const currentTime = performance.now() / 1000;
   const frameTime = Math.min(currentTime - lastTime, CONFIG.maxAccumulator);
@@ -444,7 +452,7 @@ function animate(): void {
 
   render();
 
-  stats.end();
+  if (stats) stats.end();
 }
 
 // applies input updates motion and firing steps bullets and starfield and syncs camera and hud
@@ -541,4 +549,143 @@ function onWindowResize(): void {
   const dpr = Math.min(window.devicePixelRatio, dprTarget);
   renderer.setPixelRatio(dpr);
   composer.setSize(window.innerWidth, window.innerHeight);
+}
+
+// builds a lil-gui for live tuning of CONFIG and applies necessary rebuilds
+function buildConfigGUI(guiRoot: GUI): void {
+  const shipFolder = guiRoot.addFolder("Ship");
+  const ship = {
+    forwardSpeed: CONFIG.ship.forwardSpeed,
+    backwardSpeed: CONFIG.ship.backwardSpeed,
+    turnSpeed: CONFIG.ship.turnSpeed,
+    velocityDamping: CONFIG.ship.velocityDamping,
+    rotationDamping: CONFIG.ship.rotationDamping,
+    maxVelocity: CONFIG.ship.maxVelocity,
+  };
+  shipFolder
+    .add(ship, "forwardSpeed", 1, 60, 0.1)
+    .onChange(
+      (v: number) => ((CONFIG as unknown as any).ship.forwardSpeed = v),
+    );
+  shipFolder
+    .add(ship, "backwardSpeed", 0, 30, 0.1)
+    .onChange(
+      (v: number) => ((CONFIG as unknown as any).ship.backwardSpeed = v),
+    );
+  shipFolder
+    .add(ship, "turnSpeed", 0, 5, 0.01)
+    .onChange((v: number) => ((CONFIG as unknown as any).ship.turnSpeed = v));
+  shipFolder
+    .add(ship, "velocityDamping", 0.8, 1.0, 0.001)
+    .onChange(
+      (v: number) => ((CONFIG as unknown as any).ship.velocityDamping = v),
+    );
+  shipFolder
+    .add(ship, "rotationDamping", 0.8, 1.0, 0.001)
+    .onChange(
+      (v: number) => ((CONFIG as unknown as any).ship.rotationDamping = v),
+    );
+  shipFolder
+    .add(ship, "maxVelocity", 1, 100, 1)
+    .onChange((v: number) => ((CONFIG as unknown as any).ship.maxVelocity = v));
+  shipFolder.open();
+
+  const bulletFolder = guiRoot.addFolder("Bullet");
+  const bullet = {
+    speed: CONFIG.bullet.speed,
+    lifetime: CONFIG.bullet.lifetime,
+    radius: CONFIG.bullet.radius,
+    color: CONFIG.bullet.color,
+    regenerate: () => rebuildBulletSystem(),
+  } as {
+    speed: number;
+    lifetime: number;
+    radius: number;
+    color: number;
+    regenerate: () => void;
+  };
+  bulletFolder
+    .add(bullet, "speed", 1, 200, 1)
+    .onChange((v: number) => ((CONFIG as unknown as any).bullet.speed = v));
+  bulletFolder
+    .add(bullet, "lifetime", 0.05, 5.0, 0.01)
+    .onChange((v: number) => ((CONFIG as unknown as any).bullet.lifetime = v));
+  bulletFolder.add(bullet, "radius", 0.01, 0.6, 0.005).onChange((v: number) => {
+    (CONFIG as unknown as any).bullet.radius = v;
+    rebuildBulletSystem();
+  });
+  bulletFolder.addColor(bullet, "color").onChange((v: number) => {
+    (CONFIG as unknown as any).bullet.color = v;
+    rebuildBulletSystem();
+  });
+  bulletFolder.add(bullet, "regenerate").name("Regenerate Geometry");
+  bulletFolder.open();
+
+  const starFolder = guiRoot.addFolder("Starfield");
+  const star = {
+    count: CONFIG.starfield.count,
+    radius: CONFIG.starfield.radius,
+    rotationSpeed: CONFIG.starfield.rotationSpeed,
+    regenerate: () => rebuildStarfield(),
+  } as {
+    count: number;
+    radius: number;
+    rotationSpeed: number;
+    regenerate: () => void;
+  };
+  starFolder.add(star, "count", 100, 5000, 50).onFinishChange((v: number) => {
+    (CONFIG as unknown as any).starfield.count = Math.floor(v);
+    rebuildStarfield();
+  });
+  starFolder.add(star, "radius", 50, 800, 5).onFinishChange((v: number) => {
+    (CONFIG as unknown as any).starfield.radius = v;
+    rebuildStarfield();
+  });
+  starFolder
+    .add(star, "rotationSpeed", 0.0, 0.2, 0.001)
+    .onChange(
+      (v: number) => ((CONFIG as unknown as any).starfield.rotationSpeed = v),
+    );
+  starFolder.add(star, "regenerate");
+  starFolder.open();
+
+  const cameraFolder = guiRoot.addFolder("Camera");
+  const cameraCfg = {
+    fov: CONFIG.camera.fov,
+    followSpeed: CONFIG.camera.followSpeed,
+  };
+  cameraFolder.add(cameraCfg, "fov", 30, 110, 1).onChange((v: number) => {
+    (CONFIG as unknown as any).camera.fov = v;
+    camera.fov = v;
+    camera.updateProjectionMatrix();
+  });
+  cameraFolder
+    .add(cameraCfg, "followSpeed", 0.01, 0.5, 0.005)
+    .onChange(
+      (v: number) => ((CONFIG as unknown as any).camera.followSpeed = v),
+    );
+  cameraFolder.open();
+}
+
+function rebuildStarfield(): void {
+  if (starfield) {
+    scene.remove(starfield);
+    const geo = starfield.geometry as THREE.BufferGeometry;
+    const mat = starfield.material as THREE.Material;
+    geo.dispose();
+    if (typeof (mat as any).dispose === "function") (mat as any).dispose();
+  }
+  starfield = createStarfield();
+  scene.add(starfield);
+}
+
+function rebuildBulletSystem(): void {
+  if (bulletSystem) {
+    scene.remove(bulletSystem.instancedMesh);
+    disposeBulletSystem();
+  }
+  bullets = [];
+  networkBullets.clear();
+  bulletSystem = createBulletSystem();
+  scene.add(bulletSystem.instancedMesh);
 }
