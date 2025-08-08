@@ -75,11 +75,11 @@ export async function initGame(canvas: HTMLCanvasElement): Promise<void> {
   await setupHDRI();
   setupPostProcessing();
 
-  if (isDebug) {
-    stats = new Stats();
-    stats.showPanel(0);
-    document.body.appendChild(stats.dom);
+  stats = new Stats();
+  stats.showPanel(0);
+  document.body.appendChild(stats.dom);
 
+  if (isDebug) {
     gui = new GUI({ title: "Config" });
     buildConfigGUI(gui);
   }
