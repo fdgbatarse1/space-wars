@@ -30,6 +30,31 @@ dracoLoader.setDecoderPath(
 dracoLoader.preload();
 gltfLoader.setDRACOLoader(dracoLoader);
 
+// returns base turn speed plus a small boost on mobile/coarse pointer devices
+function getTurnSpeed(): number {
+  const isCoarsePointer =
+    window.matchMedia?.("(pointer: coarse)").matches ?? false;
+  return isCoarsePointer ? CONFIG.ship.turnSpeedTouch : CONFIG.ship.turnSpeed;
+}
+
+// returns rotation damping using a stronger factor on touch/coarse pointer devices
+function getRotationDamping(): number {
+  const isCoarsePointer =
+    window.matchMedia?.("(pointer: coarse)").matches ?? false;
+  return isCoarsePointer
+    ? CONFIG.ship.rotationDampingTouch
+    : CONFIG.ship.rotationDamping;
+}
+
+// returns velocity damping using a stronger factor on touch/coarse pointer devices
+function getVelocityDamping(): number {
+  const isCoarsePointer =
+    window.matchMedia?.("(pointer: coarse)").matches ?? false;
+  return isCoarsePointer
+    ? CONFIG.ship.velocityDampingTouch
+    : CONFIG.ship.velocityDamping;
+}
+
 // loads a glb or gltf model once and caches its root group to reuse across ships
 async function loadModelOnce(modelPath: string): Promise<THREE.Group> {
   const cached = modelCache.get(modelPath);
@@ -173,7 +198,7 @@ export async function createRemoteShip(playerId: string): Promise<Ship> {
 
 // integrates rotation and position with damping and clamped speed refreshes the bounding box and updates fixed matrices
 export function updateShip(ship: Ship, deltaTime: number): void {
-  ship.rotationVelocity.multiplyScalar(CONFIG.ship.rotationDamping);
+  ship.rotationVelocity.multiplyScalar(getRotationDamping());
 
   ship.mesh.rotation.x += ship.rotationVelocity.x * deltaTime;
   ship.mesh.rotation.y += ship.rotationVelocity.y * deltaTime;
@@ -208,7 +233,7 @@ export function accelerateShip(ship: Ship, deltaTime: number): void {
 
 // applies velocity damping to slow the ship
 export function decelerateShip(ship: Ship, _deltaTime: number): void {
-  ship.velocity.multiplyScalar(CONFIG.ship.velocityDamping);
+  ship.velocity.multiplyScalar(getVelocityDamping());
 }
 
 // adjusts pitch angular velocity based on input direction and delta time
@@ -217,7 +242,7 @@ export function pitchShip(
   direction: number,
   deltaTime: number,
 ): void {
-  ship.rotationVelocity.x += direction * CONFIG.ship.turnSpeed * deltaTime;
+  ship.rotationVelocity.x += direction * getTurnSpeed() * deltaTime;
 }
 
 // adjusts yaw angular velocity based on input direction and delta time
@@ -226,7 +251,7 @@ export function yawShip(
   direction: number,
   deltaTime: number,
 ): void {
-  ship.rotationVelocity.y += direction * CONFIG.ship.turnSpeed * deltaTime;
+  ship.rotationVelocity.y += direction * getTurnSpeed() * deltaTime;
 }
 
 // disposes only owned materials and geometries avoiding shared cached assets
