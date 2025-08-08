@@ -20,7 +20,7 @@
 2. **Clone the repository**
 
    ```bash
-   git clone
+   git clone https://github.com/fdgbatarse1/space-wars.git
    cd webgl-06
    ```
 
