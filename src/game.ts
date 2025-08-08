@@ -57,7 +57,8 @@ const cameraKick = { amount: 0 };
 
 let environmentTexture: THREE.Texture | null = null;
 
-const isDebug = import.meta.env.VITE_IS_DEBUG === "true";
+const isDebug =
+  new URLSearchParams(window.location.search).get("debug") === "true";
 let shipBoxHelper: THREE.BoxHelper | null = null;
 let remoteBoxHelpers: Map<string, THREE.BoxHelper> = new Map();
 
