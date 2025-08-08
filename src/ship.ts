@@ -37,7 +37,7 @@ function cloneShipModel(
   const model = base.clone(true);
   model.traverse((child) => {
     if (child instanceof THREE.Mesh) {
-      child.castShadow = true;
+      child.castShadow = false;
       child.receiveShadow = false;
       child.matrixAutoUpdate = false;
 
@@ -73,7 +73,7 @@ export async function createShip(): Promise<Ship> {
     ownedGeometries.add(geometry);
     ownedMaterials.add(material);
     const mesh = new THREE.Mesh(geometry, material);
-    mesh.castShadow = true;
+    mesh.castShadow = false;
     mesh.receiveShadow = false;
     mesh.matrixAutoUpdate = false;
     group.add(mesh);
@@ -113,7 +113,7 @@ export async function createRemoteShip(playerId: string): Promise<Ship> {
     ownedGeometries.add(geometry);
     ownedMaterials.add(material);
     const mesh = new THREE.Mesh(geometry, material);
-    mesh.castShadow = true;
+    mesh.castShadow = false;
     mesh.receiveShadow = false;
     mesh.matrixAutoUpdate = false;
     group.add(mesh);

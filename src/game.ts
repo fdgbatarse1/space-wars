@@ -60,7 +60,6 @@ export async function initGame(canvas: HTMLCanvasElement): Promise<void> {
   setupCamera();
   setupRenderer(canvas);
   await setupHDRI();
-  setupLighting();
   setupPostProcessing();
 
   stats = new Stats();
@@ -349,11 +348,6 @@ function setupRenderer(canvas: HTMLCanvasElement): void {
 
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.2;
-
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.shadowMap.autoUpdate = false;
-  renderer.shadowMap.needsUpdate = true;
 }
 
 async function setupHDRI(): Promise<void> {
@@ -379,23 +373,6 @@ async function setupHDRI(): Promise<void> {
   } finally {
     pmremGenerator.dispose();
   }
-}
-
-function setupLighting(): void {
-  const directionalLight = new THREE.DirectionalLight(
-    CONFIG.lighting.directional.color,
-    CONFIG.lighting.directional.intensity,
-  );
-  directionalLight.position.set(...CONFIG.lighting.directional.position);
-  directionalLight.castShadow = true;
-  directionalLight.shadow.mapSize.setScalar(512);
-  directionalLight.shadow.camera.near = 0.5;
-  directionalLight.shadow.camera.far = 30;
-  directionalLight.shadow.camera.left = -10;
-  directionalLight.shadow.camera.right = 10;
-  directionalLight.shadow.camera.top = 10;
-  directionalLight.shadow.camera.bottom = -10;
-  scene.add(directionalLight);
 }
 
 function setupPostProcessing(): void {
