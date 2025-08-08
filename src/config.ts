@@ -1,3 +1,5 @@
+// centralizes game tuning for physics camera and visuals tweak values here to rebalance gameplay
+// uses seconds world-units and radians damping factors are per-frame multipliers in 0..1
 export const CONFIG = {
   ship: {
     forwardSpeed: 15,

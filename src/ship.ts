@@ -1,5 +1,8 @@
+// loads and caches ship models builds local and remote ships updates motion and cleans up resources
+// keeps shared models immutable and tracks owned materials and geometries to dispose safely
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 import { CONFIG } from "./config";
 
 export interface Ship {
@@ -16,19 +19,51 @@ export interface Ship {
 const modelCache: Map<string, THREE.Group> = new Map();
 const ownedMaterials = new WeakSet<THREE.Material>();
 const ownedGeometries = new WeakSet<THREE.BufferGeometry>();
+let blueTexture: THREE.Texture | null = null;
 
+// reuses loaders to avoid extra workers and warm up the draco decoder once
+const gltfLoader = new GLTFLoader();
+const dracoLoader = new DRACOLoader();
+dracoLoader.setDecoderPath(
+  "https://www.gstatic.com/draco/versioned/decoders/1.5.7/",
+);
+dracoLoader.preload();
+gltfLoader.setDRACOLoader(dracoLoader);
+
+// loads a glb or gltf model once and caches its root group to reuse across ships
 async function loadModelOnce(modelPath: string): Promise<THREE.Group> {
   const cached = modelCache.get(modelPath);
   if (cached) {
     return cached;
   }
-  const loader = new GLTFLoader();
-  const gltf = await loader.loadAsync(modelPath);
+  const gltf = await gltfLoader.loadAsync(modelPath);
   const sceneGroup = gltf.scene as THREE.Group;
+  if (!blueTexture) {
+    const textureLoader = new THREE.TextureLoader();
+    blueTexture = await textureLoader.loadAsync(
+      "/assets/textures/Bob_Blue.png",
+    );
+  }
+  sceneGroup.traverse((obj) => {
+    if (obj instanceof THREE.Mesh) {
+      const material = obj.material as
+        | THREE.Material
+        | THREE.Material[]
+        | undefined;
+      if (!material) return;
+      const materialsArray = Array.isArray(material) ? material : [material];
+      materialsArray.forEach((mat) => {
+        (mat as THREE.MeshStandardMaterial).map = blueTexture;
+        mat.side = THREE.FrontSide;
+        mat.needsUpdate = true;
+      });
+    }
+  });
   modelCache.set(modelPath, sceneGroup);
   return sceneGroup;
 }
 
+// deep-clones the model optionally recolors materials freezes matrices rotates y and wraps in a parent group
 function cloneShipModel(
   base: THREE.Group,
   options?: { recolor?: boolean; color?: THREE.Color | number },
@@ -60,10 +95,11 @@ function cloneShipModel(
   return wrapper;
 }
 
+// builds the local player ship from the cached model or box fallback sets start pose and computes a bounding box
 export async function createShip(): Promise<Ship> {
   let group: THREE.Group;
   try {
-    const base = await loadModelOnce("/assets/models/spaceship/Bob.gltf");
+    const base = await loadModelOnce("/assets/models/spaceship/Bob-v1.glb");
     group = cloneShipModel(base);
   } catch (error) {
     console.error("Could not load ship model, using fallback box", error);
@@ -94,10 +130,11 @@ export async function createShip(): Promise<Ship> {
   };
 }
 
+// builds a remote player ship tinted tags with playerId and computes a bounding box
 export async function createRemoteShip(playerId: string): Promise<Ship> {
   let group: THREE.Group;
   try {
-    const base = await loadModelOnce("/assets/models/spaceship/Bob.gltf");
+    const base = await loadModelOnce("/assets/models/spaceship/Bob-v1.glb");
     group = cloneShipModel(base, {
       recolor: true,
       color: new THREE.Color(0.8, 0.8, 1.0),
@@ -134,6 +171,7 @@ export async function createRemoteShip(playerId: string): Promise<Ship> {
   };
 }
 
+// integrates rotation and position with damping and clamped speed refreshes the bounding box and updates fixed matrices
 export function updateShip(ship: Ship, deltaTime: number): void {
   ship.rotationVelocity.multiplyScalar(CONFIG.ship.rotationDamping);
 
@@ -159,6 +197,7 @@ export function updateShip(ship: Ship, deltaTime: number): void {
   });
 }
 
+// accelerates forward in the ship's facing direction
 export function accelerateShip(ship: Ship, deltaTime: number): void {
   const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(
     ship.mesh.quaternion,
@@ -167,10 +206,12 @@ export function accelerateShip(ship: Ship, deltaTime: number): void {
   ship.velocity.addScaledVector(forward, acceleration);
 }
 
+// applies velocity damping to slow the ship
 export function decelerateShip(ship: Ship, _deltaTime: number): void {
   ship.velocity.multiplyScalar(CONFIG.ship.velocityDamping);
 }
 
+// adjusts pitch angular velocity based on input direction and delta time
 export function pitchShip(
   ship: Ship,
   direction: number,
@@ -179,6 +220,7 @@ export function pitchShip(
   ship.rotationVelocity.x += direction * CONFIG.ship.turnSpeed * deltaTime;
 }
 
+// adjusts yaw angular velocity based on input direction and delta time
 export function yawShip(
   ship: Ship,
   direction: number,
@@ -187,6 +229,7 @@ export function yawShip(
   ship.rotationVelocity.y += direction * CONFIG.ship.turnSpeed * deltaTime;
 }
 
+// disposes only owned materials and geometries avoiding shared cached assets
 export function disposeShip(ship: Ship): void {
   ship.mesh.traverse((obj) => {
     if (!(obj instanceof THREE.Mesh)) return;
@@ -211,4 +254,9 @@ export function disposeShip(ship: Ship): void {
       geometry.dispose();
     }
   });
+}
+
+// optionally disposes the draco decoder workers when no further draco content will be loaded
+export function disposeDracoLoader(): void {
+  dracoLoader.dispose();
 }

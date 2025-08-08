@@ -1,7 +1,10 @@
+// manages the multiplayer networking client socket.io connection and game events
+// exposes connect and disconnect periodic updates bullet firing and callbacks
 import { io, Socket } from "socket.io-client";
 import * as THREE from "three";
 import { Ship } from "./ship";
 
+// represents player state exchanged with the server including position rotation and velocity
 interface PlayerData {
   id: string;
   position: { x: number; y: number; z: number };
@@ -12,6 +15,7 @@ interface PlayerData {
   maxHealth?: number;
 }
 
+// represents bullet data sent and received when a bullet is fired
 interface BulletData {
   id: string;
   playerId: string;
@@ -20,6 +24,7 @@ interface BulletData {
   timestamp: number;
 }
 
+// holds internal networking state and registered event callbacks
 interface NetworkState {
   socket: Socket | null;
   remotePlayers: Map<string, Ship>;
@@ -36,6 +41,7 @@ interface NetworkState {
   onPlayerRespawned: ((player: PlayerData) => void) | null;
 }
 
+// stores a single shared instance for the session connection and timers
 const networkState: NetworkState = {
   socket: null,
   remotePlayers: new Map(),
@@ -50,6 +56,7 @@ const networkState: NetworkState = {
   onPlayerRespawned: null,
 };
 
+// exposes the networking api and event hook setters
 export function createNetworkManager() {
   return {
     connect,
@@ -96,6 +103,7 @@ export function createNetworkManager() {
   };
 }
 
+// connects to the game server captures the local player id and registers event listeners
 function connect(serverUrl: string = "http://localhost:3001"): Promise<void> {
   return new Promise((resolve, reject) => {
     const url = import.meta.env.VITE_SERVER_URL || serverUrl;
@@ -121,6 +129,7 @@ function connect(serverUrl: string = "http://localhost:3001"): Promise<void> {
   });
 }
 
+// subscribes to server events and forwards them to registered callbacks
 function setupEventListeners(): void {
   if (!networkState.socket) return;
 
@@ -184,6 +193,7 @@ function setupEventListeners(): void {
   });
 }
 
+// periodically sends local ship transforms to the server every 50ms by default
 function startSendingUpdates(localShip: Ship, interval: number = 50): void {
   if (networkState.updateInterval) {
     clearInterval(networkState.updateInterval);
@@ -196,6 +206,7 @@ function startSendingUpdates(localShip: Ship, interval: number = 50): void {
   }, interval);
 }
 
+// stops periodic position rotation and velocity updates
 function stopSendingUpdates(): void {
   if (networkState.updateInterval) {
     clearInterval(networkState.updateInterval);
@@ -203,6 +214,7 @@ function stopSendingUpdates(): void {
   }
 }
 
+// emits the current ship pose and velocity to the server if connected
 function sendPositionUpdate(ship: Ship): void {
   if (!networkState.socket || !networkState.socket.connected) return;
 
@@ -229,6 +241,7 @@ function sendPositionUpdate(ship: Ship): void {
   networkState.socket.emit("update_position", data);
 }
 
+// notifies the server that a bullet was fired with initial position and velocity
 function fireBullet(position: THREE.Vector3, velocity: THREE.Vector3): void {
   if (!networkState.socket || !networkState.socket.connected) return;
 
@@ -240,6 +253,7 @@ function fireBullet(position: THREE.Vector3, velocity: THREE.Vector3): void {
   networkState.socket.emit("fire_bullet", data);
 }
 
+// disconnects from the server and clears timers and remote player state
 function disconnect(): void {
   stopSendingUpdates();
 

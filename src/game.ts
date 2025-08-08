@@ -1,3 +1,5 @@
+// sets up scene, camera, input, hud, bullets, and networking
+// runs a fixed-step update loop and renders with post-processing
 import * as THREE from "three";
 import { gsap } from "gsap";
 import Stats from "stats.js";
@@ -55,6 +57,7 @@ let environmentTexture: THREE.Texture | null = null;
 let lastTime = performance.now() / 1000;
 let accumulator = 0;
 
+// bootstraps the game and starts the main loop safe to call once on page load
 export async function initGame(canvas: HTMLCanvasElement): Promise<void> {
   setupScene();
   setupCamera();
@@ -107,6 +110,7 @@ export async function initGame(canvas: HTMLCanvasElement): Promise<void> {
   console.log(renderer.info);
 }
 
+// wires network events to create, update, and remove remote players and bullets
 function setupNetworkHandlers(): void {
   networkManager.onPlayerJoined = async (playerData) => {
     if (
@@ -319,11 +323,13 @@ function setupNetworkHandlers(): void {
   };
 }
 
+// creates the three.js scene and fog backdrop
 function setupScene(): void {
   scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0x000000, 50, 500);
 }
 
+// builds a perspective camera using values from config
 function setupCamera(): void {
   camera = new THREE.PerspectiveCamera(
     CONFIG.camera.fov,
@@ -334,8 +340,11 @@ function setupCamera(): void {
   camera.position.set(...CONFIG.camera.position);
 }
 
+// configures the webgl renderer (dpr, size, tone mapping) for performance
 function setupRenderer(canvas: HTMLCanvasElement): void {
-  const dpr = Math.min(window.devicePixelRatio, 1.4);
+  const isCoarse = window.matchMedia?.("(pointer: coarse)").matches ?? false;
+  const dprTarget = isCoarse ? 1.0 : 1.4;
+  const dpr = Math.min(window.devicePixelRatio, dprTarget);
 
   renderer = new THREE.WebGLRenderer({
     canvas,
@@ -350,6 +359,7 @@ function setupRenderer(canvas: HTMLCanvasElement): void {
   renderer.toneMappingExposure = 1.2;
 }
 
+// loads an hdri, bakes a pmrem env map, and applies it to the scene safely
 async function setupHDRI(): Promise<void> {
   const rgbeLoader = new RGBELoader();
   const pmremGenerator = new THREE.PMREMGenerator(renderer);
@@ -357,7 +367,7 @@ async function setupHDRI(): Promise<void> {
 
   try {
     const hdrTex = await rgbeLoader.loadAsync(
-      "/assets/textures/studio_small_08_1k.hdr",
+      "/assets/hdr/studio_small_08_1k.hdr",
     );
     hdrTex.mapping = THREE.EquirectangularReflectionMapping;
 
@@ -375,6 +385,7 @@ async function setupHDRI(): Promise<void> {
   }
 }
 
+// creates the effect composer with a render pass and chromatic aberration
 function setupPostProcessing(): void {
   composer = new EffectComposer(renderer);
 
@@ -391,6 +402,7 @@ function setupPostProcessing(): void {
   composer.addPass(effectPass);
 }
 
+// lazily creates and updates a simple health hud anchored to the viewport
 function updateHUD(): void {
   if (!hud) {
     hud = document.createElement("div");
@@ -410,6 +422,7 @@ function updateHUD(): void {
   hud.textContent = `❤ ${Math.max(0, Math.floor(current))}`;
 }
 
+// requestanimationframe loop with fixed-step updates wrapped in stats timing
 function animate(): void {
   requestAnimationFrame(animate);
 
@@ -431,6 +444,7 @@ function animate(): void {
   stats.end();
 }
 
+// applies input updates motion and firing steps bullets and starfield and syncs camera and hud
 function update(deltaTime: number): void {
   const input = getInput();
 
@@ -497,6 +511,7 @@ function update(deltaTime: number): void {
   updateHUD();
 }
 
+// uses a smooth third-person follow camera with brief kickback when firing
 function updateCamera(): void {
   const offsetBaseZ = 8 + cameraKick.amount * 2.0;
   const offset = new THREE.Vector3(0, 2.5, offsetBaseZ).applyQuaternion(
@@ -507,15 +522,19 @@ function updateCamera(): void {
   camera.lookAt(ship.mesh.position);
 }
 
+// renders via post-processing composer (single pass chain)
 function render(): void {
   composer.render();
 }
 
+// automatically adjusts to window size changes
 function onWindowResize(): void {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
-  const dpr = Math.min(window.devicePixelRatio, 1.4);
+  const isCoarse = window.matchMedia?.("(pointer: coarse)").matches ?? false;
+  const dprTarget = isCoarse ? 1.0 : 1.4;
+  const dpr = Math.min(window.devicePixelRatio, dprTarget);
   renderer.setPixelRatio(dpr);
   composer.setSize(window.innerWidth, window.innerHeight);
 }

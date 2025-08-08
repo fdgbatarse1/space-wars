@@ -1,3 +1,5 @@
+// renders a static spherical cloud of stars using three.js points and custom glsl shaders
+// exposes creation and per-frame rotation helpers createStarfield and updateStarfield
 import {
   Points,
   BufferGeometry,
@@ -7,6 +9,7 @@ import {
 } from "three";
 import { CONFIG } from "./config";
 
+// vertex shader that perspective scales point size and computes depth-based fade via vAlpha
 const vertexShader = `
   precision mediump float;
   attribute float aSize;
@@ -21,6 +24,7 @@ const vertexShader = `
   }
 `;
 
+// fragment shader that draws a soft circular sprite and applies depth fade via vAlpha with additive blending
 const fragmentShader = `
   precision mediump float;
   varying float vAlpha;
@@ -38,6 +42,7 @@ const fragmentShader = `
   }
 `;
 
+// creates a spherical distribution of star points with random sizes and returns a static points mesh
 export function createStarfield(): Points {
   const { count, radius } = CONFIG.starfield;
   const positions = new Float32Array(count * 3);
@@ -75,6 +80,7 @@ export function createStarfield(): Points {
   return starfield;
 }
 
+// rotates the starfield around y based on deltaTime and applies the transform to its matrix
 export function updateStarfield(starfield: Points, deltaTime: number): void {
   starfield.rotation.y += CONFIG.starfield.rotationSpeed * deltaTime;
   starfield.updateMatrix();

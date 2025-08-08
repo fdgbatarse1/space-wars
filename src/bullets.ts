@@ -1,3 +1,5 @@
+// renders and updates up to max bullets efficiently using three.instancedmesh
+// handles pooling movement lifetime culling aabbs fire-rate gating and resource cleanup
 import * as THREE from "three";
 import { CONFIG } from "./config";
 
@@ -24,6 +26,7 @@ let bulletSystem: BulletSystem | null = null;
 const tempMatrix = new THREE.Matrix4();
 const tempPosition = new THREE.Vector3();
 
+// initializes the instanced mesh and bullet pool and returns the bullet system handle
 export function createBulletSystem(): BulletSystem {
   const geometry = new THREE.SphereGeometry(CONFIG.bullet.radius, 6, 6);
 
@@ -65,6 +68,7 @@ export function createBulletSystem(): BulletSystem {
   return bulletSystem;
 }
 
+// activates a pooled bullet at position and direction sets velocity and aabb and updates its instance
 export function createBullet(
   position: THREE.Vector3,
   direction: THREE.Vector3,
@@ -93,6 +97,7 @@ export function createBullet(
   return bullet;
 }
 
+// advances active bullets updates matrices and aabbs and returns active bullets
 export function updateBullets(
   bullets: Bullet[],
   deltaTime: number,
@@ -149,6 +154,7 @@ export function updateBullets(
   return bulletSystem.bullets.filter((b) => b.active);
 }
 
+// limits fire rate allowing a shot only if enough time passed since lastFireTime
 export function canFire(): boolean {
   const now = Date.now();
   if (now - lastFireTime > CONFIG.bullet.fireRate) {
@@ -158,10 +164,12 @@ export function canFire(): boolean {
   return false;
 }
 
+// returns the current bullet system singleton or null if not yet created or disposed
 export function getBulletSystem(): BulletSystem | null {
   return bulletSystem;
 }
 
+// disposes gpu resources and clears the bullet system reference
 export function disposeBulletSystem(): void {
   if (!bulletSystem) return;
 

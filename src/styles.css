@@ -15,3 +15,15 @@ body {
   width: 100vw;
   height: 100vh;
 }
+
+html, body {
+  overflow: hidden;
+  background: #000;
+}
+
+#canvas {
+  width: 100vw;
+  height: 100vh;
+  touch-action: none;
+  -webkit-tap-highlight-color: rgba(0,0,0,0);
+}
